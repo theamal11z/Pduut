@@ -140,10 +140,25 @@ class TableDetector:
             # Generate sample structured data (in real implementation, this would use OCR on cells)
             table_data = self.extract_table_content(table_roi, table_structure)
             
-            # Save as CSV
-            if table_data.get('rows'):
-                df = pd.DataFrame(table_data['rows'])
-                df.to_csv(csv_path, index=False)
+            # Save as CSV using the content data
+            try:
+                if table_data.get('content') and isinstance(table_data['content'], list) and len(table_data['content']) > 0:
+                    # Use the structured content for CSV
+                    df = pd.DataFrame(table_data['content'])
+                    df.to_csv(csv_path, index=False, header=False)
+                else:
+                    # Create a basic CSV file with table information
+                    with open(csv_path, 'w', encoding='utf-8') as f:
+                        f.write("Table_ID,Rows,Columns,Detection_Method\n")
+                        f.write(f"{table_id},{table_data.get('rows', 0)},{table_data.get('cols', 0)},structure_analysis\n")
+            except Exception as e:
+                print(f"Error creating CSV for {table_id}: {str(e)}")
+                # Create a minimal CSV file
+                with open(csv_path, 'w', encoding='utf-8') as f:
+                    f.write("Table_Info\n")
+                    f.write(f"Table detected: {table_id}\n")
+                    f.write(f"Rows: {table_data.get('rows', 'Unknown')}\n")
+                    f.write(f"Columns: {table_data.get('cols', 'Unknown')}\n")
             
             # Save as JSON
             with open(json_path, 'w', encoding='utf-8') as f:
@@ -280,25 +295,28 @@ class TableDetector:
             "cols": structure.get('cols', 0),
             "extraction_method": "structure_analysis",
             "content": [],
-            "raw_data": []
+            "cell_data": []
         }
         
         try:
             rows = structure.get('rows', 2)
             cols = structure.get('cols', 2)
             
-            # Generate placeholder structure (in real implementation, would use OCR on each cell)
+            # Generate table structure with cell positions (OCR would extract actual content)
             for row in range(rows):
                 row_data = []
                 for col in range(cols):
-                    # Placeholder cell content
-                    cell_content = f"Cell({row+1},{col+1})"
+                    # For now, indicate cell position - in production this would contain OCR text
+                    cell_content = f"R{row+1}C{col+1}"
                     row_data.append(cell_content)
                 table_data["content"].append(row_data)
-                table_data["raw_data"].append({
-                    "row": row + 1,
-                    "data": row_data
-                })
+                
+            # Also store metadata about cells
+            table_data["cell_data"] = {
+                "total_cells": rows * cols,
+                "grid_size": f"{rows}x{cols}",
+                "detection_confidence": "medium"
+            }
             
         except Exception as e:
             print(f"Error extracting table content: {str(e)}")

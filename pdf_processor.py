@@ -106,16 +106,44 @@ class PDFProcessor:
             pix = page.get_pixmap(matrix=fitz.Matrix(2, 2))  # 2x resolution
             img_data = pix.tobytes("png")
             
-            # Extract text using OCR
-            if self.ocr_engine:
-                page_data["text"] = self.ocr_engine.extract_text_from_image_data(img_data)
-                
-                # Save text to file
-                text_filename = f"page_{page_number}.txt"
-                text_path = os.path.join(assets_dir, "text", text_filename)
-                with open(text_path, 'w', encoding='utf-8') as f:
-                    f.write(page_data["text"])
-                page_data["resources_links"]["page_text_link"] = f"assets/text/{text_filename}"
+            # Extract text - combine native PDF text and OCR for complete coverage
+            extracted_text = ""
+            
+            # First try to extract native text from PDF
+            try:
+                native_text = page.get_text()
+                if native_text and native_text.strip():
+                    extracted_text = native_text
+            except:
+                pass
+            
+            # If no native text or text is minimal, use OCR
+            if self.ocr_engine and (not extracted_text or len(extracted_text.strip()) < 100):
+                ocr_text = self.ocr_engine.extract_text_from_image_data(img_data)
+                if ocr_text and len(ocr_text.strip()) > len(extracted_text.strip()):
+                    extracted_text = ocr_text
+                elif extracted_text and ocr_text:
+                    # Combine both if they contain different content
+                    combined_text = f"{extracted_text}\n\n--- OCR Content ---\n{ocr_text}"
+                    extracted_text = combined_text
+            
+            # For very short text, always add OCR to ensure complete coverage
+            if self.ocr_engine and len(extracted_text.strip()) < 200:
+                ocr_text = self.ocr_engine.extract_text_from_image_data(img_data)
+                if ocr_text and ocr_text.strip() not in extracted_text:
+                    if extracted_text.strip():
+                        extracted_text = f"{extracted_text}\n\n--- Additional OCR Content ---\n{ocr_text}"
+                    else:
+                        extracted_text = ocr_text
+            
+            page_data["text"] = extracted_text
+            
+            # Save text to file
+            text_filename = f"page_{page_number}.txt"
+            text_path = os.path.join(assets_dir, "text", text_filename)
+            with open(text_path, 'w', encoding='utf-8') as f:
+                f.write(page_data["text"])
+            page_data["resources_links"]["page_text_link"] = f"assets/text/{text_filename}"
             
             # Extract equations
             if self.extract_equations and self.equation_detector:
