@@ -184,6 +184,7 @@ class ImageExtractor:
             
         except Exception as e:
             print(f"Error finding diagram regions: {str(e)}")
+            filtered_regions = []
         
         return filtered_regions[:10]  # Limit to top 10 regions
     
