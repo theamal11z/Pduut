@@ -1,0 +1,38 @@
+# Virtual environments
+.venv/
+venv/
+ENV/
+
+# Python cache and build artifacts
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.egg-info/
+.build/
+.dist/
+
+# OS / Editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# Replit
+.replit
+replit.nix
+replit.md
+
+# Environment & local config
+.env
+*.env
+
+# Streamlit
+.streamlit/
+
+# Logs
+*.log
+
+# App outputs (optional; uncomment if you don't want to track results)
+# assets/
+# *.zip

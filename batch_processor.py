@@ -8,6 +8,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from pdf_processor import PDFProcessor
 from utils import create_output_structure, sanitize_filename, ensure_directory
 import threading
+import numpy as np
 
 class BatchPDFProcessor:
     """Process multiple PDFs in batch with progress tracking"""

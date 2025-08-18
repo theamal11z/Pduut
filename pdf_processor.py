@@ -1,4 +1,8 @@
-import fitz  # PyMuPDF
+# Robust import for PyMuPDF across versions / distributions
+try:
+    import pymupdf as fitz  # Preferred module name
+except Exception:
+    import fitz  # Fallback alias maintained by some versions
 import os
 import json
 from datetime import datetime
@@ -7,6 +11,10 @@ from image_extractor import ImageExtractor
 from table_detector import TableDetector
 from equation_detector import EquationDetector
 from utils import create_output_structure, sanitize_filename, ensure_directory
+import io
+from PIL import Image
+import numpy as np
+import cv2
 
 class PDFProcessor:
     def __init__(self, ocr_languages=None, extract_images=True, extract_tables=True, extract_equations=True, use_advanced_ocr=False):
@@ -102,9 +110,32 @@ class PDFProcessor:
         }
         
         try:
-            # Get page as image for OCR and analysis
-            pix = page.get_pixmap(matrix=fitz.Matrix(2, 2))  # 2x resolution
+            # Get page as image for OCR and analysis (force RGB, no alpha)
+            pix = page.get_pixmap(
+                matrix=fitz.Matrix(2, 2),  # 2x resolution
+                colorspace=getattr(fitz, 'csRGB', None),
+                alpha=False
+            )
             img_data = pix.tobytes("png")
+            
+            # Fallback: if rendered image is too dark (black), re-render with alpha and composite over white
+            try:
+                nparr_chk = np.frombuffer(img_data, np.uint8)
+                img_chk = cv2.imdecode(nparr_chk, cv2.IMREAD_COLOR)
+                if img_chk is None or float(img_chk.mean()) < 10.0:
+                    pix_a = page.get_pixmap(
+                        matrix=fitz.Matrix(2, 2),
+                        colorspace=getattr(fitz, 'csRGB', None),
+                        alpha=True
+                    )
+                    rgba = Image.open(io.BytesIO(pix_a.tobytes("png"))).convert("RGBA")
+                    bg = Image.new("RGB", rgba.size, (255, 255, 255))
+                    bg.paste(rgba, mask=rgba.split()[-1])
+                    buf = io.BytesIO()
+                    bg.save(buf, format="PNG")
+                    img_data = buf.getvalue()
+            except Exception:
+                pass
             
             # Extract text - combine native PDF text and OCR for complete coverage
             extracted_text = ""

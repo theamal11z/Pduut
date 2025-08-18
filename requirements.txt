@@ -1,0 +1,16 @@
+# Core runtime dependencies for PDUUT — PDF Data Unification and Understanding Tool
+# Install with: pip install -r requirements.txt
+
+pymupdf>=1.23
+opencv-python>=4.8
+pytesseract>=0.3.10
+Pillow>=10.0
+numpy>=1.24
+pandas>=2.0
+streamlit>=1.32
+PyYAML>=6.0
+markdown>=3.5
+
+# Optional: if you hit platform-specific issues, you may also need
+# - tesseract-ocr (system package)
+# - libgl1 (Linux, for OpenCV)

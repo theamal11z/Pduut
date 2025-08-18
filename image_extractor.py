@@ -1,9 +1,14 @@
-import fitz
+# Robust import for PyMuPDF across versions / distributions
+try:
+    import pymupdf as fitz  # Preferred module name
+except Exception:
+    import fitz  # Fallback alias maintained by some versions
 import cv2
 import numpy as np
 from PIL import Image
 import os
 import json
+import io
 
 class ImageExtractor:
     def __init__(self):
@@ -46,7 +51,7 @@ class ImageExtractor:
                     xref = img[0]
                     base_image = page.parent.extract_image(xref)
                     image_bytes = base_image["image"]
-                    image_ext = base_image["ext"]
+                    image_ext = base_image.get("ext", "png")
                     
                     # Create unique ID
                     diagram_id = f"page_{page_number}_embedded_{img_index}"
@@ -55,8 +60,48 @@ class ImageExtractor:
                     image_filename = f"{diagram_id}.png"
                     image_path = os.path.join(assets_dir, "images", image_filename)
                     
-                    # Convert to PIL Image and save as PNG
+                    # Convert to PIL Image (handle soft-mask alpha if present) and save as PNG
                     image = Image.open(io.BytesIO(image_bytes))
+                    # If PyMuPDF provided an explicit alpha channel as separate bytes, apply it
+                    alpha_bytes = base_image.get("alpha")
+                    if alpha_bytes:
+                        try:
+                            alpha = Image.open(io.BytesIO(alpha_bytes)).convert("L")
+                            if image.mode != "RGBA":
+                                image = image.convert("RGBA")
+                            rgba = Image.new("RGBA", image.size)
+                            rgba.paste(image.convert("RGB"))
+                            rgba.putalpha(alpha)
+                            # Composite over white to avoid transparency going black
+                            bg = Image.new("RGB", rgba.size, (255, 255, 255))
+                            bg.paste(rgba, mask=rgba.split()[-1])
+                            image = bg
+                        except Exception:
+                            # Fallback to normal conversion
+                            image = image.convert("RGB")
+                    else:
+                        # No separate alpha: normalize modes
+                        if image.mode in ("RGBA", "P", "CMYK"):
+                            # Composite any internal alpha over white if RGBA
+                            if image.mode == "RGBA":
+                                bg = Image.new("RGB", image.size, (255, 255, 255))
+                                bg.paste(image, mask=image.split()[-1])
+                                image = bg
+                            else:
+                                image = image.convert("RGB")
+
+                    # Skip images that are nearly black
+                    try:
+                        arr_preview = np.array(image)
+                        if arr_preview.ndim == 3:
+                            mean_val = float(arr_preview.mean())
+                        else:
+                            mean_val = float(arr_preview.astype(np.float32).mean())
+                        if mean_val < 12.0:
+                            # Too dark: skip adding this image
+                            continue
+                    except Exception:
+                        pass
                     
                     # Check minimum size
                     if image.size[0] >= self.min_image_size[0] and image.size[1] >= self.min_image_size[1]:
@@ -91,13 +136,33 @@ class ImageExtractor:
         diagrams = []
         
         try:
-            # Get page as high-resolution image
-            pix = page.get_pixmap(matrix=fitz.Matrix(3, 3))
+            # Get page as high-resolution image (force RGB, no alpha)
+            pix = page.get_pixmap(
+                matrix=fitz.Matrix(3, 3),
+                colorspace=getattr(fitz, 'csRGB', None),
+                alpha=False
+            )
             img_data = pix.tobytes("png")
             
             # Convert to OpenCV format
             nparr = np.frombuffer(img_data, np.uint8)
             img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
+            
+            # Fallback: if too dark, re-render with alpha and composite over white
+            try:
+                if img is None or float(img.mean()) < 10.0:
+                    pix_a = page.get_pixmap(
+                        matrix=fitz.Matrix(3, 3),
+                        colorspace=getattr(fitz, 'csRGB', None),
+                        alpha=True
+                    )
+                    rgba = Image.open(io.BytesIO(pix_a.tobytes("png"))).convert("RGBA")
+                    bg = Image.new("RGB", rgba.size, (255, 255, 255))
+                    bg.paste(rgba, mask=rgba.split()[-1])
+                    # convert PIL RGB to OpenCV BGR
+                    img = cv2.cvtColor(np.array(bg), cv2.COLOR_RGB2BGR)
+            except Exception:
+                pass
             
             if img is None:
                 return diagrams
@@ -121,6 +186,12 @@ class ImageExtractor:
                     # Save region as image
                     image_filename = f"{diagram_id}.png"
                     image_path = os.path.join(assets_dir, "images", image_filename)
+                    # Skip crops that are nearly black
+                    try:
+                        if float(roi.mean()) < 12.0:
+                            continue
+                    except Exception:
+                        pass
                     cv2.imwrite(image_path, roi)
                     
                     # Generate description
