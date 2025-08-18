@@ -1,10 +1,9 @@
 [project]
-name = "repl-nix-workspace"
+name = "pduut"
 version = "0.1.0"
-description = "Add your description here"
+description = "PDUUT — PDF Data Unification and Understanding Tool. Extracts structured, page-wise data (text, images, tables, equations) from educational PDFs."
 requires-python = ">=3.11"
 dependencies = [
-    "fitz>=0.0.1.dev2",
     "markdown>=3.8.2",
     "numpy>=2.3.2",
     "opencv-python>=4.11.0.86",
@@ -14,4 +13,11 @@ dependencies = [
     "pytesseract>=0.3.13",
     "pyyaml>=6.0.2",
     "streamlit>=1.48.1",
+]
+
+authors = [
+    { name = "Mohsin Raja" }
+]
+maintainers = [
+    { name = "Mohsin Raja" }
 ]

@@ -122,8 +122,11 @@ Pduut/
 - Extending exports: add a new handler in `ExportManager` and wire it in `export_data()`.
 - Adding detectors: implement a detector and plug it into `PDFProcessor.process_page()`.
 
+## Author
+- Mohsin Raja — Project author/maintainer
+
 ## License
-MIT (or your preferred license)
+MIT (see `LICENSE`)
 
 ## Acknowledgements
 - PyMuPDF, Tesseract OCR, OpenCV, Streamlit, NumPy, Pandas, PyYAML, Python Markdown.

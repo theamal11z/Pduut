@@ -48,3 +48,6 @@ We follow our [Code of Conduct](CODE_OF_CONDUCT.md). Be respectful and construct
 
 ## Need help?
 Open a discussion or issue with details. Maintainers will guide you on where to start.
+
+## Maintainers
+- Mohsin Raja (project author/maintainer)
