@@ -5,6 +5,7 @@ import json
 import os
 from PIL import Image
 import io
+import pytesseract
 
 class EquationDetector:
     def __init__(self):
@@ -25,8 +26,10 @@ class EquationDetector:
         # Compile patterns
         self.compiled_patterns = [re.compile(pattern, re.IGNORECASE) for pattern in self.math_patterns]
     
-    def detect_equations(self, text, image_data, page_number):
-        """Detect mathematical equations in text and image"""
+    def detect_equations(self, text, image_data, page_number, assets_dir=None):
+        """Detect mathematical equations in text and image.
+        If assets_dir is provided, save cropped equation images to assets/images.
+        """
         
         equations = []
         
@@ -36,7 +39,7 @@ class EquationDetector:
             equations.extend(text_equations)
             
             # Image-based detection (simplified)
-            image_equations = self.detect_equations_in_image(image_data, page_number)
+            image_equations = self.detect_equations_in_image(image_data, page_number, assets_dir=assets_dir)
             equations.extend(image_equations)
             
         except Exception as e:
@@ -95,8 +98,10 @@ class EquationDetector:
         
         return equations
     
-    def detect_equations_in_image(self, image_data, page_number):
-        """Detect mathematical equations in image using visual patterns"""
+    def detect_equations_in_image(self, image_data, page_number, assets_dir=None):
+        """Detect mathematical equations in image using visual patterns.
+        Saves crops when assets_dir is provided.
+        """
         
         equations = []
         
@@ -108,7 +113,7 @@ class EquationDetector:
             if img is None:
                 return equations
             
-            # Find potential equation regions
+            # Find potential equation regions (enhanced)
             equation_regions = self.find_equation_regions(img)
             
             for i, region in enumerate(equation_regions):
@@ -119,9 +124,13 @@ class EquationDetector:
                     x, y, w, h = region['bbox']
                     equation_roi = img[y:y+h, x:x+w]
                     
-                    # Save equation image
+                    # Save equation image if path provided
                     equation_filename = f"{equation_id}.png"
-                    # Note: In a full implementation, you'd save to assets_dir
+                    if assets_dir:
+                        import os
+                        images_dir = os.path.join(assets_dir, "images")
+                        os.makedirs(images_dir, exist_ok=True)
+                        _ = cv2.imwrite(os.path.join(images_dir, equation_filename), equation_roi)
                     
                     # Analyze equation content
                     latex = self.image_to_latex(equation_roi)
@@ -133,7 +142,7 @@ class EquationDetector:
                         "detection_method": "visual_pattern",
                         "confidence": region.get('confidence', 0.5),
                         "bbox": {"x": x, "y": y, "width": w, "height": h},
-                        "image_link": f"assets/images/{equation_filename}"
+                        "image_link": f"assets/images/{equation_filename}" if assets_dir else ""
                     }
                     
                     equations.append(equation_data)
@@ -148,16 +157,54 @@ class EquationDetector:
         return equations
     
     def find_equation_regions(self, img):
-        """Find regions likely to contain mathematical equations"""
+        """Find regions likely to contain mathematical equations using thresholding,
+        morphology, and MSER heuristics.
+        """
         
         regions = []
         
         try:
             # Convert to grayscale
             gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-            
-            # Detect mathematical symbols using template matching (simplified approach)
-            equation_candidates = self.detect_math_symbols(gray)
+
+            # Adaptive threshold to emphasize text/equations
+            thr = cv2.adaptiveThreshold(gray, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C,
+                                        cv2.THRESH_BINARY_INV, 35, 10)
+
+            # Morphological close to join characters into lines/blocks
+            kx = max(15, img.shape[1] // 80)
+            kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (kx, 3))
+            closed = cv2.morphologyEx(thr, cv2.MORPH_CLOSE, kernel, iterations=1)
+
+            # MSER to detect stable text-like regions
+            try:
+                mser = cv2.MSER_create(_min_area=60, _max_area=10000)
+                regions, _ = mser.detectRegions(gray)
+                mser_mask = np.zeros_like(gray, dtype=np.uint8)
+                for pts in regions:
+                    cv2.fillPoly(mser_mask, [pts.reshape(-1, 1, 2)], 255)
+                fused = cv2.bitwise_or(closed, mser_mask)
+            except Exception:
+                fused = closed
+
+            # Find contours as candidate blocks
+            contours, _ = cv2.findContours(fused, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+            equation_candidates = []
+            for cnt in contours:
+                x, y, w, h = cv2.boundingRect(cnt)
+                if w < 40 or h < 12:
+                    continue
+                ratio = w / float(h)
+                area = w * h
+                # Equations tend to be wider than tall or compact mathematical blocks
+                if ratio > 1.4 and area > 800:
+                    roi = gray[y:y+h, x:x+w]
+                    symbol_count = self.count_math_features(roi)
+                    equation_candidates.append({
+                        'bbox': (x, y, w, h),
+                        'symbol_count': symbol_count,
+                        'area': area
+                    })
             
             for candidate in equation_candidates:
                 # Simple confidence scoring based on symbol density
@@ -288,23 +335,61 @@ class EquationDetector:
         return latex
     
     def image_to_latex(self, equation_image):
-        """Convert equation image to LaTeX (simplified placeholder)"""
-        
+        """Convert equation image to LaTeX-like string using OCR heuristics.
+        Not a perfect converter; aims to avoid generic placeholders.
+        """
         try:
-            # In a full implementation, this would use specialized ML models
-            # like im2latex-tensorflow, pix2tex, etc.
-            
-            # For now, return a placeholder
-            h, w = equation_image.shape[:2]
-            
-            # Simple heuristics based on image characteristics
-            if w > h * 3:
-                return "$\\text{Long mathematical expression}$"
-            elif w < h:
-                return "$\\frac{\\text{numerator}}{\\text{denominator}}$"
+            # Preprocess ROI for OCR
+            if len(equation_image.shape) == 3:
+                gray = cv2.cvtColor(equation_image, cv2.COLOR_BGR2GRAY)
             else:
-                return "$\\text{Mathematical equation}$"
-        
+                gray = equation_image
+
+            gray = cv2.resize(gray, None, fx=1.5, fy=1.5, interpolation=cv2.INTER_CUBIC)
+            thr = cv2.adaptiveThreshold(gray, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C,
+                                        cv2.THRESH_BINARY_INV, 31, 10)
+            # Remove small noise
+            kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (1, 1))
+            proc = cv2.morphologyEx(thr, cv2.MORPH_OPEN, kernel, iterations=1)
+
+            # OCR with math-friendly whitelist
+            config = (
+                "--psm 6 -c tessedit_char_whitelist=0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ+\-*/=^()[]{}.,;:_\\ "+
+                "-c preserve_interword_spaces=1"
+            )
+            text = pytesseract.image_to_string(proc, config=config)
+            text = text.strip()
+
+            if not text:
+                return "$\\text{Equation}$"
+
+            # Basic normalization
+            text = re.sub(r"\s+", " ", text)
+            # Simple LaTeX-ish conversions
+            replacements = {
+                "*": " \\cdot ",
+                "+-": " \\pm ",
+                ">=": " \\geq ",
+                "<=": " \\leq ",
+                "!=": " \\neq ",
+                "~=": " \\approx ",
+            }
+            for k, v in replacements.items():
+                text = text.replace(k, v)
+
+            # Exponents a^b -> a^{b}
+            text = re.sub(r"([A-Za-z0-9])\^([A-Za-z0-9]+)", r"\1^{\2}", text)
+            # Fractions a/b -> \\frac{a}{b} when simple
+            text = re.sub(r"\b([A-Za-z0-9]+)\s*/\s*([A-Za-z0-9]+)\b", r"\\frac{\1}{\2}", text)
+
+            # Limit very long strings
+            if len(text) > 120:
+                text = text[:117] + "..."
+
+            # Wrap in math mode
+            if not text.startswith("$"):
+                text = f"${text}$"
+            return text
         except Exception as e:
             print(f"Error converting image to LaTeX: {str(e)}")
             return "$\\text{Equation}$"

@@ -5,6 +5,7 @@ import json
 import os
 from PIL import Image
 import io
+import pytesseract
 
 class TableDetector:
     def __init__(self):
@@ -287,37 +288,82 @@ class TableDetector:
             return self.min_cols
     
     def extract_table_content(self, table_roi, structure):
-        """Extract content from table cells (simplified version)"""
+        """Extract content from table cells using OCR.
+        Uses detected grid lines when available; otherwise splits uniformly.
+        """
         
         table_data = {
             "table_type": "detected_table",
             "rows": structure.get('rows', 0),
             "cols": structure.get('cols', 0),
-            "extraction_method": "structure_analysis",
+            "extraction_method": "ocr_cells",
             "content": [],
             "cell_data": []
         }
         
         try:
-            rows = structure.get('rows', 2)
-            cols = structure.get('cols', 2)
-            
-            # Generate table structure with cell positions (OCR would extract actual content)
-            for row in range(rows):
+            rows = max(1, int(structure.get('rows', 1)))
+            cols = max(1, int(structure.get('cols', 1)))
+
+            # Preprocess for OCR
+            gray = cv2.cvtColor(table_roi, cv2.COLOR_BGR2GRAY)
+            thr = cv2.adaptiveThreshold(gray, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C,
+                                        cv2.THRESH_BINARY, 31, 10)
+
+            h, w = gray.shape[:2]
+            h_lines = structure.get('horizontal_lines') or []
+            v_lines = structure.get('vertical_lines') or []
+
+            # Build grid boundaries
+            if len(h_lines) >= 2 and len(v_lines) >= 2:
+                ys = sorted(h_lines)
+                xs = sorted(v_lines)
+            else:
+                # Uniform splits
+                ys = [int(i * h / rows) for i in range(rows + 1)]
+                xs = [int(j * w / cols) for j in range(cols + 1)]
+
+            # Ensure bounds cover full image
+            ys[0] = 0
+            ys[-1] = h
+            xs[0] = 0
+            xs[-1] = w
+
+            ocr_config = "--psm 6"
+
+            for r in range(rows):
                 row_data = []
-                for col in range(cols):
-                    # For now, indicate cell position - in production this would contain OCR text
-                    cell_content = f"R{row+1}C{col+1}"
-                    row_data.append(cell_content)
+                y0 = ys[r] if r < len(ys) - 1 else int(r * h / rows)
+                y1 = ys[r + 1] if r + 1 < len(ys) else int((r + 1) * h / rows)
+                y0, y1 = max(0, y0), min(h, y1)
+                for c in range(cols):
+                    x0 = xs[c] if c < len(xs) - 1 else int(c * w / cols)
+                    x1 = xs[c + 1] if c + 1 < len(xs) else int((c + 1) * w / cols)
+                    x0, x1 = max(0, x0), min(w, x1)
+                    if y1 <= y0 or x1 <= x0:
+                        row_data.append("")
+                        continue
+
+                    cell = thr[y0:y1, x0:x1]
+
+                    # Small border to reduce line noise
+                    pad = max(1, min(cell.shape[0], cell.shape[1]) // 50)
+                    cell_clean = cell[pad:-pad, pad:-pad] if cell.shape[0] > 2*pad and cell.shape[1] > 2*pad else cell
+
+                    try:
+                        text = pytesseract.image_to_string(cell_clean, config=ocr_config)
+                        text = text.strip()
+                    except Exception:
+                        text = ""
+
+                    row_data.append(text)
                 table_data["content"].append(row_data)
-                
-            # Also store metadata about cells
+
             table_data["cell_data"] = {
                 "total_cells": rows * cols,
                 "grid_size": f"{rows}x{cols}",
                 "detection_confidence": "medium"
             }
-            
         except Exception as e:
             print(f"Error extracting table content: {str(e)}")
         

@@ -112,7 +112,7 @@ class PDFProcessor:
         try:
             # Get page as image for OCR and analysis (force RGB, no alpha)
             pix = page.get_pixmap(
-                matrix=fitz.Matrix(2, 2),  # 2x resolution
+                matrix=fitz.Matrix(3, 3),  # bump to 3x for better OCR/equations
                 colorspace=getattr(fitz, 'csRGB', None),
                 alpha=False
             )
@@ -124,7 +124,7 @@ class PDFProcessor:
                 img_chk = cv2.imdecode(nparr_chk, cv2.IMREAD_COLOR)
                 if img_chk is None or float(img_chk.mean()) < 10.0:
                     pix_a = page.get_pixmap(
-                        matrix=fitz.Matrix(2, 2),
+                        matrix=fitz.Matrix(3, 3),
                         colorspace=getattr(fitz, 'csRGB', None),
                         alpha=True
                     )
@@ -137,6 +137,27 @@ class PDFProcessor:
             except Exception:
                 pass
             
+            # Optional preprocessing to improve OCR & detectors (CLAHE + unsharp)
+            try:
+                nparr = np.frombuffer(img_data, np.uint8)
+                img_bgr = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
+                if img_bgr is not None:
+                    lab = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2LAB)
+                    l, a, b = cv2.split(lab)
+                    clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
+                    l2 = clahe.apply(l)
+                    lab2 = cv2.merge((l2, a, b))
+                    img_eq = cv2.cvtColor(lab2, cv2.COLOR_LAB2BGR)
+                    # mild denoise and sharpen
+                    blur = cv2.GaussianBlur(img_eq, (0, 0), sigmaX=1.0)
+                    img_sharp = cv2.addWeighted(img_eq, 1.5, blur, -0.5, 0)
+                    # encode back to PNG bytes
+                    ok, enc = cv2.imencode('.png', img_sharp)
+                    if ok:
+                        img_data = enc.tobytes()
+            except Exception:
+                pass
+
             # Extract text - combine native PDF text and OCR for complete coverage
             extracted_text = ""
             
@@ -178,7 +199,7 @@ class PDFProcessor:
             
             # Extract equations
             if self.extract_equations and self.equation_detector:
-                equations = self.equation_detector.detect_equations(page_data["text"], img_data, page_number)
+                equations = self.equation_detector.detect_equations(page_data["text"], img_data, page_number, assets_dir=assets_dir)
                 page_data["equations"] = equations
                 page_data["resources_links"]["equations_links"] = [eq.get("image_link", "") for eq in equations]
             
