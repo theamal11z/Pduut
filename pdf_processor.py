@@ -9,14 +9,15 @@ from equation_detector import EquationDetector
 from utils import create_output_structure, sanitize_filename, ensure_directory
 
 class PDFProcessor:
-    def __init__(self, ocr_languages=None, extract_images=True, extract_tables=True, extract_equations=True):
+    def __init__(self, ocr_languages=None, extract_images=True, extract_tables=True, extract_equations=True, use_advanced_ocr=False):
         self.ocr_languages = ocr_languages or ["eng"]
         self.extract_images = extract_images
         self.extract_tables = extract_tables
         self.extract_equations = extract_equations
+        self.use_advanced_ocr = use_advanced_ocr
         
         # Initialize engines
-        self.ocr_engine = OCREngine(languages=self.ocr_languages)
+        self.ocr_engine = OCREngine(languages=self.ocr_languages, use_advanced_preprocessing=use_advanced_ocr)
         self.image_extractor = ImageExtractor() if extract_images else None
         self.table_detector = TableDetector() if extract_tables else None
         self.equation_detector = EquationDetector() if extract_equations else None

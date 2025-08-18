@@ -4,11 +4,17 @@ import numpy as np
 from PIL import Image
 import io
 import os
+from advanced_ocr import AdvancedOCRProcessor
 
 class OCREngine:
-    def __init__(self, languages=None):
+    def __init__(self, languages=None, use_advanced_preprocessing=False):
         self.languages = languages or ["eng"]
         self.lang_string = "+".join(self.languages)
+        self.use_advanced_preprocessing = use_advanced_preprocessing
+        
+        # Initialize advanced OCR processor if requested
+        if use_advanced_preprocessing:
+            self.advanced_processor = AdvancedOCRProcessor()
         
         # Configure tesseract if needed
         # pytesseract.pytesseract.tesseract_cmd = '/usr/bin/tesseract'  # Adjust path if needed
@@ -17,23 +23,29 @@ class OCREngine:
         """Extract text from image data using OCR"""
         
         try:
-            # Convert image data to PIL Image
-            image = Image.open(io.BytesIO(image_data))
-            
-            # Convert to numpy array for OpenCV processing
-            img_array = np.array(image)
-            
-            # Preprocess image for better OCR
-            processed_img = self.preprocess_image(img_array)
-            
-            # Extract text using tesseract
-            custom_config = f'--oem 3 --psm 6 -l {self.lang_string}'
-            text = pytesseract.image_to_string(processed_img, config=custom_config)
-            
-            # Clean and format text
-            cleaned_text = self.clean_text(text)
-            
-            return cleaned_text
+            if self.use_advanced_preprocessing:
+                # Use advanced OCR preprocessing
+                result = self.advanced_processor.extract_text_with_confidence_regions(image_data)
+                return result.get('text', '')
+            else:
+                # Standard OCR processing
+                # Convert image data to PIL Image
+                image = Image.open(io.BytesIO(image_data))
+                
+                # Convert to numpy array for OpenCV processing
+                img_array = np.array(image)
+                
+                # Preprocess image for better OCR
+                processed_img = self.preprocess_image(img_array)
+                
+                # Extract text using tesseract
+                custom_config = f'--oem 3 --psm 6 -l {self.lang_string}'
+                text = pytesseract.image_to_string(processed_img, config=custom_config)
+                
+                # Clean and format text
+                cleaned_text = self.clean_text(text)
+                
+                return cleaned_text
             
         except Exception as e:
             print(f"Error in OCR processing: {str(e)}")
