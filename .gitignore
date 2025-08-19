@@ -27,8 +27,8 @@ replit.md
 .env
 *.env
 
-# Streamlit
-.streamlit/
+# # Streamlit
+# .streamlit/
 
 # Logs
 *.log
