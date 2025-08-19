@@ -374,7 +374,8 @@ def display_results(result, temp_dir, original_filename):
                         with cols[j % 3]:
                             image_path = os.path.join(temp_dir, "assets", "images", f"{diagram['diagram_id']}.png")
                             if os.path.exists(image_path):
-                                st.image(image_path, caption=f"Image {j+1}", use_container_width=True)
+                                # Streamlit 1.35 uses 'use_column_width' instead of 'use_container_width'
+                                st.image(image_path, caption=f"Image {j+1}", use_column_width=True)
                 
                 # Tables
                 if page_data.get("tables"):
