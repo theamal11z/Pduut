@@ -13,15 +13,21 @@ import traceback
 
 # Page configuration
 st.set_page_config(
-    page_title="PDUUT - PDF Data Extraction Tool",
+    page_title="PDUUT: PDF Extractor for Books | Mohsin Raja | Tables, Images, OCR",
     page_icon="📚",
     layout="wide",
     initial_sidebar_state="expanded"
 )
 
 def main():
-    st.title("📚 PDUUT - PDF Data Extraction Tool")
-    st.markdown("**Extract structured, page-wise data from educational book PDFs for RAG systems**")
+    st.title("📚 PDUUT – Advanced PDF Extractor by Mohsin Raja")
+    # Streamlit indexing tip: search engines favor content in headers/text near top.
+    st.header("PDF text, tables, images, and equations extractor for books and documents")
+    st.text(
+        "PDUUT (PDF Data Unification and Understanding Tool) – a fast, accurate PDF extractor "
+        "for educational books and research PDFs. Extract OCR text, tables, figures, and LaTeX "
+        "equations for RAG and knowledge bases. Built by Mohsin Raja."
+    )
     
     # Sidebar for configuration
     st.sidebar.header("Processing Mode")
@@ -270,8 +276,8 @@ def display_results(result, temp_dir, original_filename):
     """Display processing results and provide download options with a tabbed UI"""
     st.success("PDF processed successfully!")
 
-    summary_tab, pages_tab, quality_tab, downloads_tab = st.tabs([
-        "Summary", "Pages", "Quality", "Downloads"
+    summary_tab, pages_tab, quality_tab, downloads_tab, info_tab = st.tabs([
+        "Summary", "Pages", "Quality", "Downloads", "Info"
     ])
 
     # --- Summary Tab ---
@@ -399,6 +405,44 @@ def display_results(result, temp_dir, original_filename):
                 mime="application/zip",
                 type="primary"
             )
+
+    # --- Info Tab ---
+    with info_tab:
+        st.header("About PDUUT (PDF Data Unification and Understanding Tool)")
+        st.markdown(
+            """
+            PDUUT is an advanced PDF extractor for educational books and research documents, built by **Mohsin Raja**.
+            It unifies OCR text, tables, figures/images, and LaTeX equations into structured outputs suitable for RAG
+            pipelines and knowledge bases.
+
+            - Extract page-wise text with OCR
+            - Detect and save tables to JSON/CSV where possible
+            - Collect figures/diagrams as images
+            - Identify equations and preserve LaTeX
+            - Export to JSON, CSV, XML, Markdown, YAML
+            """
+        )
+
+        st.subheader("Use cases")
+        st.markdown(
+            """
+            - Extract text and tables from PDF books and academic papers
+            - Build retrieval-augmented generation (RAG) datasets from textbooks
+            - Convert PDFs into structured formats for analytics and search
+            - Prepare course materials, summaries, and knowledge bases
+            - PDF table extractor for research datasets
+            """
+        )
+
+        st.subheader("FAQ")
+        with st.expander("What kinds of PDFs work best?"):
+            st.write("High-quality, text-based PDFs produce the most accurate OCR and table detection.")
+        with st.expander("Does it support scanned PDFs?"):
+            st.write("Yes. Enable OCR (default) and consider 'Advanced OCR Preprocessing' for noisy scans.")
+        with st.expander("What formats can I export?"):
+            st.write("JSON by default, plus CSV, XML, Markdown, and YAML when selected.")
+        with st.expander("Who built this tool?"):
+            st.write("PDUUT was built by Mohsin Raja.")
 
 def create_download_package(result, temp_dir, original_filename):
     """Create a ZIP package with all extracted data"""
