@@ -1,0 +1,14 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "pduut-app"
+version = "0.1.0"
+description = "PDUUT Streamlit application (not a library package)."
+requires-python = ">=3.11"
+authors = [{ name = "Mohsin Raja" }]
+
+# We are not shipping a library package; avoid package discovery.
+[tool.setuptools]
+py-modules = []
