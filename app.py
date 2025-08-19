@@ -48,11 +48,18 @@ def main():
     extract_equations = st.sidebar.checkbox("Detect Equations", value=True)
     
     # Advanced OCR options
-    st.sidebar.header("Advanced Options")
-    use_advanced_ocr = st.sidebar.checkbox("Use Advanced OCR Preprocessing", value=False, 
-                                          help="Apply advanced image preprocessing for better OCR results")
-    quality_assessment = st.sidebar.checkbox("Enable Quality Assessment", value=True,
-                                           help="Assess extraction quality for RAG applications")
+    # Advanced and quality options inside an expander for a cleaner sidebar
+    with st.sidebar.expander("Advanced Options", expanded=False):
+        use_advanced_ocr = st.checkbox(
+            "Use Advanced OCR Preprocessing",
+            value=False,
+            help="Apply advanced image preprocessing for better OCR results"
+        )
+        quality_assessment = st.checkbox(
+            "Enable Quality Assessment",
+            value=True,
+            help="Assess extraction quality for RAG applications"
+        )
     
     # Export options
     st.sidebar.header("Export Formats")
@@ -159,6 +166,10 @@ def process_single_pdf(uploaded_file, ocr_languages, extract_images, extract_tab
             if result:
                 progress_bar.progress(100)
                 status_text.text("Processing complete!")
+                try:
+                    st.toast("Processing complete!", icon="✅")
+                except Exception:
+                    pass
                 
                 # Quality assessment if enabled
                 if quality_assessment:
@@ -256,147 +267,138 @@ def update_progress(progress_bar, status_text, progress, message):
     status_text.text(message)
 
 def display_results(result, temp_dir, original_filename):
-    """Display processing results and provide download options"""
-    
+    """Display processing results and provide download options with a tabbed UI"""
     st.success("PDF processed successfully!")
-    
-    # Results summary
-    col1, col2, col3, col4, col5 = st.columns(5)
-    
-    with col1:
-        st.metric("Total Pages", result.get("pdf_metadata", {}).get("pages", 0))
-    
-    with col2:
-        total_text = sum(len(page.get("text", "")) for page in result.get("pages", []))
-        st.metric("Total Text Characters", f"{total_text:,}")
-    
-    with col3:
-        total_images = sum(len(page.get("diagrams", [])) for page in result.get("pages", []))
-        st.metric("Images Extracted", total_images)
-    
-    with col4:
-        total_tables = sum(len(page.get("tables", [])) for page in result.get("pages", []))
-        st.metric("Tables Detected", total_tables)
-    
-    with col5:
-        total_equations = sum(len(page.get("equations", [])) for page in result.get("pages", []))
-        st.metric("Equations Found", total_equations)
-    
-    # Quality Assessment Display
-    if result.get('quality_assessment'):
-        st.header("📊 Quality Assessment")
-        quality = result['quality_assessment']
-        
-        # Quality metrics
-        col1, col2, col3, col4 = st.columns(4)
+
+    summary_tab, pages_tab, quality_tab, downloads_tab = st.tabs([
+        "Summary", "Pages", "Quality", "Downloads"
+    ])
+
+    # --- Summary Tab ---
+    with summary_tab:
+        col1, col2, col3, col4, col5 = st.columns(5)
         with col1:
-            st.metric("Overall Score", f"{quality.get('overall_score', 0):.1f}%")
+            st.metric("Total Pages", result.get("pdf_metadata", {}).get("pages", 0))
         with col2:
-            st.metric("Text Quality", f"{quality.get('text_quality', 0):.1f}%")
+            total_text = sum(len(page.get("text", "")) for page in result.get("pages", []))
+            st.metric("Total Text Characters", f"{total_text:,}")
         with col3:
-            st.metric("Image Quality", f"{quality.get('image_quality', 0):.1f}%") 
+            total_images = sum(len(page.get("diagrams", [])) for page in result.get("pages", []))
+            st.metric("Images Extracted", total_images)
         with col4:
-            st.metric("Table Quality", f"{quality.get('table_quality', 0):.1f}%")
-        
-        # Issues and recommendations
-        if quality.get('issues'):
-            st.warning("**Issues Found:**")
-            for issue in quality['issues']:
-                st.write(f"• {issue}")
-        
-        if quality.get('recommendations'):
-            st.info("**Recommendations:**")
-            for rec in quality['recommendations']:
-                st.write(f"• {rec}")
-    
-    # Export Results Display
-    if result.get('export_results'):
-        st.header("📤 Export Results")
-        export_results = result['export_results']
-        
-        for format_type, export_info in export_results.items():
-            if format_type != 'package' and export_info.get('status') == 'success':
-                st.success(f"✓ {format_type.upper()} export completed successfully")
-        
-        # Package download if available
-        if export_results.get('package'):
-            st.info("Multiple format export package created!")
-    
-    # JSON Preview
-    with st.expander("📄 JSON Structure Preview"):
-        # Show first page as sample
-        if result.get("pages"):
-            sample_page = result["pages"][0]
-            st.json(sample_page)
+            total_tables = sum(len(page.get("tables", [])) for page in result.get("pages", []))
+            st.metric("Tables Detected", total_tables)
+        with col5:
+            total_equations = sum(len(page.get("equations", [])) for page in result.get("pages", []))
+            st.metric("Equations Found", total_equations)
+
+        with st.expander("📄 JSON Structure Preview"):
+            if result.get("pages"):
+                sample_page = result["pages"][0]
+                st.json(sample_page)
+            else:
+                st.json(result)
+
+    # --- Pages Tab ---
+    with pages_tab:
+        pages = result.get("pages", [])
+        if pages:
+            page_labels = [f"Page {p.get('page_number', idx+1)}" for idx, p in enumerate(pages)]
+            selected_label = st.selectbox("Select page", page_labels, index=0)
+            i = page_labels.index(selected_label)
+            page_data = pages[i]
+
+            # Text content
+            if page_data.get("text"):
+                st.subheader("Text Content")
+                st.text_area(
+                    "Extracted Text",
+                    page_data["text"][:1500] + "..." if len(page_data["text"]) > 1500 else page_data["text"],
+                    height=200,
+                    key=f"text_{i}"
+                )
+
+            # Images
+            if page_data.get("diagrams"):
+                st.subheader(f"Images/Diagrams ({len(page_data['diagrams'])})")
+                cols = st.columns(3)
+                for j, diagram in enumerate(page_data["diagrams"]):
+                    with cols[j % 3]:
+                        image_path = os.path.join(temp_dir, "assets", "images", f"{diagram['diagram_id']}.png")
+                        if os.path.exists(image_path):
+                            st.image(image_path, caption=f"Image {j+1}", use_column_width=True)
+
+            # Tables
+            if page_data.get("tables"):
+                st.subheader(f"Tables ({len(page_data['tables'])})")
+                for j, table in enumerate(page_data["tables"]):
+                    st.write(f"**Table {j+1}**")
+                    json_path = os.path.join(temp_dir, "assets", "tables", f"{table['table_id']}.json")
+                    if os.path.exists(json_path):
+                        try:
+                            with open(json_path, 'r', encoding='utf-8') as f:
+                                table_data = json.load(f)
+                            st.json(table_data)
+                        except Exception:
+                            st.write("Table data available in download package")
+
+            # Equations
+            if page_data.get("equations"):
+                st.subheader(f"Equations ({len(page_data['equations'])})")
+                for j, equation in enumerate(page_data["equations"]):
+                    st.write(f"**Equation {j+1}**: {equation.get('latex', 'N/A')}")
+
+    # --- Quality Tab ---
+    with quality_tab:
+        if result.get('quality_assessment'):
+            st.header("📊 Quality Assessment")
+            quality = result['quality_assessment']
+
+            col1, col2, col3, col4 = st.columns(4)
+            with col1:
+                st.metric("Overall Score", f"{quality.get('overall_score', 0):.1f}%")
+            with col2:
+                st.metric("Text Quality", f"{quality.get('text_quality', 0):.1f}%")
+            with col3:
+                st.metric("Image Quality", f"{quality.get('image_quality', 0):.1f}%")
+            with col4:
+                st.metric("Table Quality", f"{quality.get('table_quality', 0):.1f}%")
+
+            if quality.get('issues'):
+                st.warning("**Issues Found:**")
+                for issue in quality['issues']:
+                    st.write(f"• {issue}")
+
+            if quality.get('recommendations'):
+                st.info("**Recommendations:**")
+                for rec in quality['recommendations']:
+                    st.write(f"• {rec}")
         else:
-            st.json(result)
-    
-    # Create downloadable ZIP
-    zip_path = create_download_package(result, temp_dir, original_filename)
-    
-    if zip_path and os.path.exists(zip_path):
-        with open(zip_path, "rb") as f:
-            zip_data = f.read()
-        
-        filename = sanitize_filename(original_filename.replace('.pdf', ''))
-        download_filename = f"{filename}_extracted_{datetime.now().strftime('%Y%m%d_%H%M%S')}.zip"
-        
-        st.download_button(
-            label="📥 Download Results (ZIP)",
-            data=zip_data,
-            file_name=download_filename,
-            mime="application/zip",
-            type="primary"
-        )
-    
-    # Page-by-page results
-    st.header("📖 Page-by-Page Results")
-    
-    if result.get("pages"):
-        for i, page_data in enumerate(result["pages"]):
-            with st.expander(f"Page {page_data.get('page_number', i+1)}"):
-                
-                # Text content
-                if page_data.get("text"):
-                    st.subheader("Text Content")
-                    st.text_area(
-                        "Extracted Text", 
-                        page_data["text"][:1000] + "..." if len(page_data["text"]) > 1000 else page_data["text"],
-                        height=150,
-                        key=f"text_{i}"
-                    )
-                
-                # Images
-                if page_data.get("diagrams"):
-                    st.subheader(f"Images/Diagrams ({len(page_data['diagrams'])})")
-                    cols = st.columns(min(3, len(page_data["diagrams"])))
-                    for j, diagram in enumerate(page_data["diagrams"]):
-                        with cols[j % 3]:
-                            image_path = os.path.join(temp_dir, "assets", "images", f"{diagram['diagram_id']}.png")
-                            if os.path.exists(image_path):
-                                # Streamlit 1.35 uses 'use_column_width' instead of 'use_container_width'
-                                st.image(image_path, caption=f"Image {j+1}", use_column_width=True)
-                
-                # Tables
-                if page_data.get("tables"):
-                    st.subheader(f"Tables ({len(page_data['tables'])})")
-                    for j, table in enumerate(page_data["tables"]):
-                        st.write(f"**Table {j+1}**")
-                        # Try to display table data if available
-                        json_path = os.path.join(temp_dir, "assets", "tables", f"{table['table_id']}.json")
-                        if os.path.exists(json_path):
-                            try:
-                                with open(json_path, 'r', encoding='utf-8') as f:
-                                    table_data = json.load(f)
-                                st.json(table_data)
-                            except:
-                                st.write("Table data available in download package")
-                
-                # Equations
-                if page_data.get("equations"):
-                    st.subheader(f"Equations ({len(page_data['equations'])})")
-                    for j, equation in enumerate(page_data["equations"]):
-                        st.write(f"**Equation {j+1}**: {equation.get('latex', 'N/A')}")
+            st.info("Quality assessment is disabled or not available.")
+
+    # --- Downloads Tab ---
+    with downloads_tab:
+        export_results = result.get('export_results')
+        if export_results:
+            for format_type, export_info in export_results.items():
+                if format_type != 'package' and export_info.get('status') == 'success':
+                    st.success(f"✓ {format_type.upper()} export completed successfully")
+            if export_results.get('package'):
+                st.info("Multiple format export package created!")
+
+        zip_path = create_download_package(result, temp_dir, original_filename)
+        if zip_path and os.path.exists(zip_path):
+            with open(zip_path, "rb") as f:
+                zip_data = f.read()
+            filename = sanitize_filename(original_filename.replace('.pdf', ''))
+            download_filename = f"{filename}_extracted_{datetime.now().strftime('%Y%m%d_%H%M%S')}.zip"
+            st.download_button(
+                label="📥 Download Results (ZIP)",
+                data=zip_data,
+                file_name=download_filename,
+                mime="application/zip",
+                type="primary"
+            )
 
 def create_download_package(result, temp_dir, original_filename):
     """Create a ZIP package with all extracted data"""
