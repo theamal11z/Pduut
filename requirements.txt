@@ -4,9 +4,8 @@
 pymupdf==1.24.9
 opencv-python-headless==4.10.0.84
 pytesseract==0.3.10
-# Pillow 10.3.0 fails under Python 3.13 on Streamlit Cloud's uv installer.
-# Use a version with wheels compatible with Python 3.13.
-Pillow==11.0.0
+# Pillow must be <11 for streamlit==1.35.0; 10.2.0 has stable wheels on Py311.
+Pillow==10.2.0
 numpy==1.26.4
 pandas==2.2.2
 streamlit==1.35.0
