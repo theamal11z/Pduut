@@ -1,14 +1,8 @@
-[build-system]
-requires = ["setuptools>=61.0"]
-build-backend = "setuptools.build_meta"
+# This app is NOT a Python package. This pyproject.toml exists only to satisfy
+# environments that expect the file to be present. It intentionally avoids any
+# [build-system] or [project] tables so packaging tools do not attempt to build/install.
 
-[project]
-name = "pduut-app"
-version = "0.1.0"
-description = "PDUUT Streamlit application (not a library package)."
-requires-python = ">=3.11"
-authors = [{ name = "Mohsin Raja" }]
-
-# We are not shipping a library package; avoid package discovery.
-[tool.setuptools]
-py-modules = []
+[tool.streamlit]
+# Harmless tool section to keep the file valid but inert for packaging.
+# (Streamlit Cloud ignores this; deploy uses requirements.txt and packages.txt.)
+serverAddress = "0.0.0.0"
